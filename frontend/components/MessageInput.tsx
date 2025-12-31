@@ -3,14 +3,14 @@
 import { Send } from 'lucide-react';
 
 interface MessageInputProps {
-  input: string;
-  handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  input: string | undefined;
+  handleInputChange?: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   isLoading: boolean;
 }
 
 export function MessageInput({
-  input,
+  input = '',
   handleInputChange,
   handleSubmit,
   isLoading,
@@ -19,7 +19,7 @@ export function MessageInput({
     <form onSubmit={handleSubmit} className="flex gap-2">
       <textarea
         value={input}
-        onChange={handleInputChange}
+        onChange={handleInputChange || (() => {})}
         placeholder="Ask a question about code, documentation, or programming..."
         className="flex-1 resize-none rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-3 text-zinc-900 dark:text-zinc-50 placeholder-zinc-500 dark:placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         rows={1}

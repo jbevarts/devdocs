@@ -1,6 +1,10 @@
 # DevDocs AI - Intelligent Documentation Assistant
 
-A full-stack AI application for intelligent code documentation and assistance, built with FastAPI, Next.js, and Claude 3.5 Sonnet.
+A full-stack AI application for intelligent code documentation and assistance, built with FastAPI, Next.js, and Claude Sonnet 4.5.
+
+## Architecture
+
+The frontend routes all requests through the FastAPI backend, which handles conversation management, context summarization, and language-specific prompts. The Vercel AI SDK v6 serves as a streaming format adapter, while all business logic and AI orchestration lives in the backend for better security, scalability, and maintainability.
 
 ## Tech Stack
 
@@ -12,14 +16,14 @@ A full-stack AI application for intelligent code documentation and assistance, b
 
 ### Frontend
 - Next.js 14 (App Router) with TypeScript
-- Vercel AI SDK for streaming responses
+- Vercel AI SDK v6 (@ai-sdk/react) for streaming responses
 - Tailwind CSS for styling
 
 ### AI/ML
-- Anthropic Claude 3.5 Sonnet (primary)
+- Anthropic Claude Sonnet 4.5 (primary)
 - OpenAI GPT-4 (fallback)
-- Voyage AI or OpenAI embeddings for RAG
-- LangSmith for observability
+- Voyage AI or OpenAI embeddings for RAG (planned)
+- LangSmith for observability (planned)
 
 ### Infrastructure
 - Docker for local development
@@ -90,10 +94,25 @@ A full-stack AI application for intelligent code documentation and assistance, b
 2. Update `DATABASE_URL` and `REDIS_URL` in backend `.env`
 3. Follow the same steps as above for backend and frontend
 
+## Current Status
+
+✅ **Fully Functional Chat Interface**
+- Real-time streaming responses with AI SDK v6
+- Multi-turn conversations with context management
+- Auto-scroll to latest messages
+- Language-specific prompt selection
+- Conversation summarization for long threads
+- Modern, responsive UI with dark mode
+
 ## Development Plan
 
 - **Week 1-2**: Context Engineering + Basic Setup ✅
 - **Week 3-4**: RAG Implementation
 - **Week 5-6**: Advanced Features
 - **Week 7-8**: Production Deployment
+
+## Quick Links
+
+- [Setup Guide](./SETUP.md) - Detailed setup instructions
+- [API Documentation](http://localhost:8000/docs) - FastAPI auto-generated docs (when backend is running)
 

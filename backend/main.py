@@ -10,8 +10,11 @@ from dotenv import load_dotenv
 
 from app.api import chat, health
 from app.core.config import settings
+from pathlib import Path
 
-load_dotenv()
+# Load .env file from backend directory
+env_path = Path(__file__).parent / ".env"
+load_dotenv(dotenv_path=env_path)
 
 app = FastAPI(
     title="DevDocs AI API",

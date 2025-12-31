@@ -8,19 +8,17 @@
 cd backend
 
 # Create virtual environment
-python3.11 -m venv venv
+python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
 
 # Set up environment variables
-cp .env.example .env
-# Edit .env and add your API keys:
-# - ANTHROPIC_API_KEY (required)
-# - OPENAI_API_KEY (optional, for fallback)
-# - LANGSMITH_API_KEY (optional, for observability)
-```
+# ⚠️ IMPORTANT: Only copy if .env doesn't exist (to avoid overwriting your API keys!)
+# If you already have a .env file with your real API keys, SKIP this step!
+[ ! -f .env ] && cp .env.example .env || echo ".env already exists - preserving your existing API keys"
+# Edit .env and add your API keys (if you just created it)
 
 ### 2. Frontend Setup
 
@@ -32,7 +30,6 @@ npm install
 
 # Set up environment variables (optional)
 cp .env.example .env.local
-# Edit .env.local if you want to use a different backend URL
 ```
 
 ### 3. Start Services
@@ -107,5 +104,18 @@ Make sure you have PostgreSQL and Redis running locally, then update the connect
 ### Database connection errors
 - Ensure PostgreSQL is running
 - Check `DATABASE_URL` in `.env` matches your setup
-- For Docker: `docker-compose ps` to verify containers are running
+- For Docker: 
+  - Make sure Docker Desktop is running
+  - Check containers: `docker compose ps` or `docker-compose ps`
+  - Verify containers are running: `docker ps`
+
+### Docker Compose command not found
+- **Docker Desktop**: Install Docker Desktop from https://www.docker.com/products/docker-desktop
+  - Docker Desktop includes `docker compose` (modern syntax with space)
+  - Make sure Docker Desktop is running (check the menu bar icon)
+- **Legacy docker-compose**: If you need the hyphenated version, install separately:
+  ```bash
+  brew install docker-compose
+  ```
+- **Note**: Modern Docker uses `docker compose` (space), legacy uses `docker-compose` (hyphen)
 

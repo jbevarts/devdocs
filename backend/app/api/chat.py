@@ -15,10 +15,27 @@ chat_service = ChatService()
 context_manager = ContextManager()
 
 
+class MessagePart(BaseModel):
+    type: str  # "text", "image", "file", etc.
+    text: Optional[str] = None
+    # Add other fields for images/files later if needed
+
+
 class Message(BaseModel):
     role: str  # "user" or "assistant"
-    content: str
+    content: Optional[str] = None  # Legacy format
+    parts: Optional[List[MessagePart]] = None  # Modern format
     timestamp: Optional[datetime] = None
+    
+    def get_content(self) -> str:
+        """Extract text content from either format"""
+        if self.content:
+            return self.content
+        if self.parts:
+            # Extract text from parts
+            text_parts = [part.text for part in self.parts if part.type == "text" and part.text]
+            return "".join(text_parts)
+        return ""
 
 
 class ChatRequest(BaseModel):
@@ -43,9 +60,18 @@ async def chat(request: ChatRequest):
         # Get or create conversation ID
         conversation_id = request.conversation_id or context_manager.create_conversation_id()
         
+        # Convert messages to dict format with extracted content
+        messages_dict = [
+            {
+                "role": msg.role,
+                "content": msg.get_content()
+            }
+            for msg in request.messages
+        ]
+        
         # Manage context - summarize if needed
         processed_messages = await context_manager.process_messages(
-            messages=request.messages,
+            messages=messages_dict,
             conversation_id=conversation_id,
             language=request.language
         )
@@ -58,9 +84,13 @@ async def chat(request: ChatRequest):
         )
         
         # Store conversation state
+        last_message = {
+            "role": request.messages[-1].role,
+            "content": request.messages[-1].get_content()
+        }
         await context_manager.store_message(
             conversation_id=conversation_id,
-            message=request.messages[-1].dict() if hasattr(request.messages[-1], 'dict') else request.messages[-1],
+            message=last_message,
             response=response
         )
         

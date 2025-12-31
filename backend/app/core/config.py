@@ -2,7 +2,7 @@
 Application configuration
 """
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:3001"]
     
     # AI Settings
-    DEFAULT_MODEL: str = "claude-3-5-sonnet-20241022"
+    DEFAULT_MODEL: str = "claude-sonnet-4-5"
     FALLBACK_MODEL: str = "gpt-4"
     MAX_TOKENS: int = 4096
     TEMPERATURE: float = 0.7

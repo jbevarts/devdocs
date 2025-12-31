@@ -14,7 +14,7 @@ class ContextManager:
     """Manages conversation context and summarization"""
     
     def __init__(self):
-        self.client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        self.client = Anthropic(api_key=settings.ANTHROPIC_API_KEY.strip())
         # In-memory storage (replace with Redis/DB in production)
         self.conversations: Dict[str, List[Dict[str, Any]]] = {}
         self.summaries: Dict[str, str] = {}
@@ -41,6 +41,12 @@ class ContextManager:
         all_messages = history + [msg.dict() if hasattr(msg, 'dict') else msg for msg in messages]
         
         # Check if we need to summarize
+        # NOTE: When summarizing, old messages remain in self.conversations and are not deleted.
+        # This creates a memory leak - old messages accumulate indefinitely. The summary is only
+        # used for the API call, but full history stays in memory. In production, should either:
+        # 1. Replace old messages with summary in storage, or
+        # 2. Delete old messages after summarizing, or
+        # 3. Use Redis/DB with automatic cleanup/TTL
         if len(all_messages) > settings.SUMMARIZATION_THRESHOLD:
             # Summarize older messages
             summary = await self._summarize_conversation(

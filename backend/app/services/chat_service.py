@@ -13,7 +13,19 @@ class ChatService:
     """Service for managing chat interactions with AI models"""
     
     def __init__(self):
-        self.client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        if not settings.ANTHROPIC_API_KEY:
+            raise ValueError("ANTHROPIC_API_KEY is not set in environment variables")
+        
+        api_key = settings.ANTHROPIC_API_KEY.strip()
+        
+        # Basic validation - only check if key exists and has reasonable length
+        if not api_key:
+            raise ValueError("ANTHROPIC_API_KEY is not set in environment variables")
+        
+        if len(api_key) < 20:
+            raise ValueError(f"ANTHROPIC_API_KEY appears to be invalid (too short). Length: {len(api_key)}")
+        
+        self.client = Anthropic(api_key=api_key)
         self.model = settings.DEFAULT_MODEL
     
     async def generate_response(
@@ -81,8 +93,8 @@ class ChatService:
                 }
         
         except Exception as e:
-            # Fallback to OpenAI if configured
-            if settings.OPENAI_API_KEY:
+            # Fallback to OpenAI if configured and not a placeholder
+            if settings.OPENAI_API_KEY and not settings.OPENAI_API_KEY.startswith('your_'):
                 return await self._fallback_to_openai(
                     messages=formatted_messages,
                     system_prompt=system_prompt
