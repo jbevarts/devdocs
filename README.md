@@ -115,4 +115,19 @@ The frontend routes all requests through the FastAPI backend, which handles conv
 
 - [Setup Guide](./SETUP.md) - Detailed setup instructions
 - [API Documentation](http://localhost:8000/docs) - FastAPI auto-generated docs (when backend is running)
+- [Development Blog](./blog/README.md) - Technical blog documenting the development journey
+
+## Development Blog
+
+This project includes a technical blog that documents the development process, technical decisions, and learnings:
+
+- **[Blog Index](./blog/README.md)** - Overview and navigation
+- **[Post 001: Context Engineering Fundamentals](./blog/posts/001-context-engineering-fundamentals.md)** - System prompt design, token management, and context window strategies
+
+The blog showcases:
+- System prompt architecture and iterations
+- Token counting and context window strategies
+- Prompt format experiments with before/after comparisons
+- Context utilization metrics and analysis
+- Technical decision-making process
 

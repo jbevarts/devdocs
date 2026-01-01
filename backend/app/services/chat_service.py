@@ -101,6 +101,89 @@ class ChatService:
                 )
             raise e
     
+    async def stream_response(
+        self,
+        messages: List[Dict[str, str]],
+        language: Optional[str] = None
+    ):
+        """
+        Stream response chunks from Claude as an async generator.
+        
+        Args:
+            messages: List of message dicts with 'role' and 'content'
+            language: Optional programming language context
+        
+        Yields:
+            Text chunks as they arrive from Claude
+        """
+        import asyncio
+        from queue import Queue, Empty
+        from threading import Thread
+        
+        # Get system prompt based on language
+        system_prompt = get_system_prompt(language)
+        
+        # Format messages for Anthropic API
+        formatted_messages = []
+        for msg in messages:
+            formatted_messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
+        
+        try:
+            # Use a queue to bridge synchronous streaming to async generator
+            chunk_queue = Queue()
+            exception_queue = Queue()
+            stream_done = False
+            
+            def _stream_sync():
+                nonlocal stream_done
+                try:
+                    with self.client.messages.stream(
+                        model=self.model,
+                        max_tokens=settings.MAX_TOKENS,
+                        temperature=settings.TEMPERATURE,
+                        system=system_prompt,
+                        messages=formatted_messages
+                    ) as stream:
+                        for text in stream.text_stream:
+                            chunk_queue.put(text)
+                    stream_done = True
+                    chunk_queue.put(None)  # Signal completion
+                except Exception as e:
+                    exception_queue.put(e)
+                    stream_done = True
+                    chunk_queue.put(None)  # Signal completion
+            
+            # Start streaming in a separate thread
+            thread = Thread(target=_stream_sync, daemon=True)
+            thread.start()
+            
+            # Yield chunks as they arrive - use shorter timeout for more responsive streaming
+            while not stream_done or not chunk_queue.empty():
+                # Check for exceptions first
+                if not exception_queue.empty():
+                    raise exception_queue.get()
+                
+                # Get chunk from queue (with very short timeout for immediate yielding)
+                try:
+                    chunk = chunk_queue.get(timeout=0.01)  # 10ms timeout for faster response
+                    if chunk is None:  # Completion signal
+                        break
+                    yield chunk
+                except Empty:
+                    # No chunk available yet, yield control and check again
+                    await asyncio.sleep(0.001)  # Small sleep to yield control
+                    continue
+        
+        except Exception as e:
+            # Fallback to OpenAI if configured and not a placeholder
+            if settings.OPENAI_API_KEY and not settings.OPENAI_API_KEY.startswith('your_'):
+                # OpenAI streaming fallback would go here
+                raise e
+            raise e
+    
     async def _fallback_to_openai(
         self,
         messages: List[Dict[str, str]],

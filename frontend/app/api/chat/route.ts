@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { messages, language, conversation_id } = body;
 
-    // Forward request to backend API
+    // Forward request to backend API with streaming enabled
     const backendResponse = await fetch(`${BACKEND_URL}/api/chat/`, {
       method: 'POST',
       headers: {
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
         messages: messages, // Send in modern format - backend handles it
         language: language || undefined,
         conversation_id: conversation_id || undefined,
-        stream: false,
+        stream: true, // Enable streaming
       }),
     });
 
@@ -42,104 +42,73 @@ export async function POST(req: NextRequest) {
       throw new Error(errorMessage);
     }
 
-    const backendData = await backendResponse.json();
-
-    // Format response for AI SDK v6 - use native AI SDK format
-    // AI SDK v6 expects: text-start, text-delta, text-end format
-    const encoder = new TextEncoder();
-    const assistantMessage = backendData.message?.content || '';
-    const messageId = `msg_${Date.now()}`;
-    
-    const stream = new ReadableStream({
-      start(controller) {
-        // Send text-start
-        try {
-          const startChunk = { 
-            type: 'text-start',
-            id: messageId,
-          };
-          const startData = `data: ${JSON.stringify(startChunk)}\n\n`;
-          controller.enqueue(encoder.encode(startData));
-        } catch (e) {
-          console.error('Error sending start chunk:', e);
-        }
-        
-        // Send content in chunks to simulate streaming
-        const chunkSize = 20;
-        let index = 0;
-        let isClosed = false;
-        
-        const sendChunk = () => {
-          // Check if we're done or if controller is closed
-          if (isClosed || index >= assistantMessage.length) {
-            if (!isClosed) {
-              try {
-                // Send text-end
-                const endChunk = { 
-                  type: 'text-end',
-                  id: messageId,
-                };
-                // Use standard SSE format with 'data:' prefix
-                const endData = `data: ${JSON.stringify(endChunk)}\n\n`;
-                controller.enqueue(encoder.encode(endData));
-                controller.close();
-                isClosed = true;
-              } catch (e) {
-                // Controller already closed, ignore
-                isClosed = true;
-              }
-            }
+    // Check if backend is streaming (SSE response)
+    const contentType = backendResponse.headers.get('content-type');
+    if (contentType?.includes('text/event-stream')) {
+      // Backend is already streaming in AI SDK v6 format, pass it through
+      const reader = backendResponse.body?.getReader();
+      const decoder = new TextDecoder();
+      
+      const stream = new ReadableStream({
+        async start(controller) {
+          if (!reader) {
+            controller.close();
             return;
           }
           
-          // Check if controller is still open before trying to enqueue
           try {
-            const chunk = assistantMessage.slice(index, Math.min(index + chunkSize, assistantMessage.length));
-            // AI SDK v6 format: type: "text-delta", delta: "string"
-            const deltaChunk = {
-              type: 'text-delta',
-              id: messageId,
-              delta: chunk,
-            };
-            // Use standard SSE format with 'data:' prefix
-            const deltaData = `data: ${JSON.stringify(deltaChunk)}\n\n`;
-            controller.enqueue(encoder.encode(deltaData));
-            index += chunkSize;
-            // Send next chunk immediately (synchronously) for better compatibility
-            // DefaultChatTransport may need chunks sent faster
-            if (!isClosed) {
-              // Use setImmediate or process.nextTick equivalent for browser
-              Promise.resolve().then(() => {
-                if (!isClosed) {
-                  sendChunk();
+            let buffer = '';
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) {
+                // Flush any remaining buffer
+                if (buffer) {
+                  controller.enqueue(new TextEncoder().encode(buffer));
                 }
-              });
+                controller.close();
+                break;
+              }
+              
+              // Decode chunk (may be partial)
+              buffer += decoder.decode(value, { stream: true });
+              
+              // Process complete SSE messages (lines ending with \n\n)
+              const lines = buffer.split('\n\n');
+              // Keep the last incomplete line in buffer
+              buffer = lines.pop() || '';
+              
+              // Send complete SSE messages immediately
+              for (const line of lines) {
+                if (line.trim()) {
+                  controller.enqueue(new TextEncoder().encode(line + '\n\n'));
+                }
+              }
             }
-          } catch (e: any) {
-            // Controller was closed, stop sending chunks
-            if (e?.name !== 'TypeError' || !e?.message?.includes('closed')) {
-              console.error('Error sending chunk:', e);
-            }
-            isClosed = true;
+          } catch (error) {
+            console.error('Stream error:', error);
+            controller.error(error);
           }
-        };
-        
-        sendChunk();
-      },
-    });
-
-    // Return with conversation_id in headers
-    const headers = new Headers({
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-    });
-    
-    if (backendData.conversation_id) {
-      headers.set('x-conversation-id', backendData.conversation_id);
+        },
+      });
+      
+      // Return the stream with conversation_id in headers
+      const headers = new Headers({
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      });
+      
+      const conversationId = backendResponse.headers.get('x-conversation-id');
+      if (conversationId) {
+        headers.set('x-conversation-id', conversationId);
+      }
+      
+      return new Response(stream, { headers });
     }
-
-    return new Response(stream, { headers });
+    
+    // Fallback: non-streaming response (shouldn't happen with stream: true)
+    const backendData = await backendResponse.json();
+    throw new Error('Expected streaming response but received JSON');
   } catch (error: any) {
     console.error('Chat API error:', error);
     return new Response(

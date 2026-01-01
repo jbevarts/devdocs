@@ -2,9 +2,12 @@
 Chat API endpoints for multi-turn conversations
 """
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, AsyncGenerator
 from datetime import datetime
+import json
+import asyncio
 
 from app.services.chat_service import ChatService
 from app.services.context_manager import ContextManager
@@ -51,10 +54,11 @@ class ChatResponse(BaseModel):
     usage: Optional[Dict[str, Any]] = None
 
 
-@router.post("/", response_model=ChatResponse)
+@router.post("/")
 async def chat(request: ChatRequest):
     """
-    Handle chat requests with multi-turn conversation support
+    Handle chat requests with multi-turn conversation support.
+    Supports both streaming and non-streaming responses.
     """
     try:
         # Get or create conversation ID
@@ -76,11 +80,29 @@ async def chat(request: ChatRequest):
             language=request.language
         )
         
-        # Generate response using Claude
+        # If streaming, return SSE stream
+        if request.stream:
+            return StreamingResponse(
+                stream_chat_response(
+                    processed_messages=processed_messages,
+                    language=request.language,
+                    conversation_id=conversation_id,
+                    last_user_message=messages_dict[-1] if messages_dict else None
+                ),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Conversation-Id": conversation_id,
+                    "X-Accel-Buffering": "no",  # Disable nginx buffering if present
+                }
+            )
+        
+        # Non-streaming response
         response = await chat_service.generate_response(
             messages=processed_messages,
             language=request.language,
-            stream=request.stream
+            stream=False
         )
         
         # Store conversation state
@@ -106,6 +128,49 @@ async def chat(request: ChatRequest):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def stream_chat_response(
+    processed_messages: List[Dict[str, str]],
+    language: Optional[str],
+    conversation_id: str,
+    last_user_message: Optional[Dict[str, str]]
+) -> AsyncGenerator[str, None]:
+    """
+    Stream chat response as Server-Sent Events (SSE) in AI SDK v6 format.
+    """
+    message_id = f"msg_{int(datetime.now().timestamp() * 1000)}"
+    full_content = ""
+    
+    try:
+        # Send text-start event
+        yield f"data: {json.dumps({'type': 'text-start', 'id': message_id})}\n\n"
+        
+        # Stream response from Claude - yield chunks immediately
+        async for chunk in chat_service.stream_response(
+            messages=processed_messages,
+            language=language
+        ):
+            if chunk:
+                full_content += chunk
+                # Send text-delta event - yield immediately without buffering
+                yield f"data: {json.dumps({'type': 'text-delta', 'id': message_id, 'delta': chunk})}\n\n"
+        
+        # Send text-end event
+        yield f"data: {json.dumps({'type': 'text-end', 'id': message_id})}\n\n"
+        
+        # Store conversation state after streaming completes
+        if last_user_message:
+            await context_manager.store_message(
+                conversation_id=conversation_id,
+                message=last_user_message,
+                response={"content": full_content}
+            )
+    
+    except Exception as e:
+        # Send error event
+        error_msg = str(e)
+        yield f"data: {json.dumps({'type': 'error', 'id': message_id, 'errorText': error_msg})}\n\n"
 
 
 @router.get("/conversations/{conversation_id}")
